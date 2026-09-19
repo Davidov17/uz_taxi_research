@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Driver Market Research — Admin Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Driver Market Research — Admin Dashboard</h1>
+    <form id="filters" class="filters">
+      <label>City
+        <select id="filter-city"><option value="">All cities</option></select>
+      </label>
+      <label>Platform
+        <select id="filter-platform"><option value="">All platforms</option></select>
+      </label>
+      <label>Language
+        <select id="filter-language"><option value="">All languages</option></select>
+      </label>
+      <label>From <input type="date" id="filter-date-from" /></label>
+      <label>To <input type="date" id="filter-date-to" /></label>
+      <button type="submit">Apply</button>
+      <button type="button" id="clear-filters">Clear</button>
+    </form>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-link active" data-tab="overview">Overview</button>
+    <button class="tab-link" data-tab="economics">Driver Economics</button>
+    <button class="tab-link" data-tab="platform">Platform</button>
+    <button class="tab-link" data-tab="qualitative">Qualitative</button>
+    <button class="tab-link" data-tab="raw">Raw Data</button>
+    <button class="tab-link" data-tab="export">Export</button>
+  </nav>
+
+  <main>
+    <section id="tab-overview" class="tab-panel active">
+      <div class="card-row">
+        <div class="stat-card"><span class="stat-label">Total surveys</span><span class="stat-value" id="ov-total">—</span></div>
+        <div class="stat-card"><span class="stat-label">Completed surveys</span><span class="stat-value" id="ov-completed">—</span></div>
+      </div>
+      <p class="sample-note">Charts below show <strong>sample statistics from surveyed drivers</strong> — counts reflect exactly the completed surveys in the current filter, not the full driver population.</p>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Surveys by city</h3><canvas id="chart-by-city"></canvas></div>
+        <div class="chart-box"><h3>Surveys by platform</h3><canvas id="chart-by-platform"></canvas></div>
+        <div class="chart-box"><h3>Surveys by language</h3><canvas id="chart-by-language"></canvas></div>
+      </div>
+    </section>
+
+    <section id="tab-economics" class="tab-panel">
+      <p class="sample-note">All figures below are <strong>sample statistics</strong> computed only from surveys where the driver answered that question — missing answers are excluded, never treated as zero. Each card shows how many responses (n) the number is based on.</p>
+      <div id="economics-cards" class="card-grid"></div>
+
+      <h3>Driver profile</h3>
+      <p class="sample-note">Hours/day and driver type are structured answers in the current questionnaire. Seasonal pattern shows both the structured answer (current surveys) and a best-effort keyword reading of older free-text answers, kept as two separate bars — never merged into one number.</p>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Hours per day</h3><canvas id="chart-hours-bucket"></canvas></div>
+        <div class="chart-box"><h3>Seasonal driving pattern</h3><canvas id="chart-seasonal-pattern"></canvas></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Driver type (fleet vs independent)</h3><canvas id="chart-driver-type"></canvas></div>
+        <div class="chart-box">
+          <h3>Perceived market leader <span class="badge">driver opinion</span></h3>
+          <canvas id="chart-market-leader"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-platform" class="tab-panel">
+      <p class="sample-note">Sample statistics from surveyed drivers.</p>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Platform usage</h3><canvas id="chart-platform-usage"></canvas></div>
+        <div class="chart-box"><h3>Single vs. multi-app</h3><canvas id="chart-multi-app"></canvas></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Exclusivity (single-platform drivers)</h3><canvas id="chart-exclusivity"></canvas></div>
+        <div class="chart-box"><h3>Receives bonuses</h3><canvas id="chart-bonuses"></canvas></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Commission by platform (avg %)</h3><canvas id="chart-commission-platform"></canvas></div>
+        <div class="chart-box"><h3>Cash vs. digital payment share (avg %)</h3><canvas id="chart-cash-share"></canvas></div>
+      </div>
+    </section>
+
+    <section id="tab-qualitative" class="tab-panel">
+      <div class="estimate-banner">
+        ⚠️ <strong>Driver estimates / opinions — NOT verified market data.</strong>
+        "Market leader" is each driver's personal opinion about which platform is biggest, not an audited market figure.
+      </div>
+      <div class="qual-grid">
+        <div class="qual-box estimate">
+          <h3>Perceived market leader <span class="badge">driver opinion</span></h3>
+          <ul id="qual-market-leader"></ul>
+        </div>
+        <div class="qual-box">
+          <h3>Reasons to join a new platform</h3>
+          <ul id="qual-reasons"></ul>
+        </div>
+        <div class="qual-box">
+          <h3>Driver improvement suggestions</h3>
+          <ul id="qual-improvements"></ul>
+        </div>
+        <div class="qual-box">
+          <h3>Category requirements</h3>
+          <ul id="qual-requirements"></ul>
+        </div>
+        <div class="qual-box">
+          <h3>Employment responses (fleet / independent)</h3>
+          <ul id="qual-employment"></ul>
+        </div>
+        <div class="qual-box">
+          <h3>Bonus descriptions</h3>
+          <ul id="qual-bonus-descriptions"></ul>
+        </div>
+        <div class="qual-box">
+          <h3>Payout notes</h3>
+          <ul id="qual-payout-notes"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-raw" class="tab-panel">
+      <div class="raw-layout">
+        <div class="raw-list">
+          <h3>Completed surveys</h3>
+          <table id="survey-table">
+            <thead><tr><th>Survey ID</th><th>City</th><th>Date</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="pager">
+            <button id="prev-page">← Prev</button>
+            <span id="page-info"></span>
+            <button id="next-page">Next →</button>
+          </div>
+        </div>
+        <div class="raw-detail" id="survey-detail">
+          <p class="muted">Select a survey to view its full record.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-export" class="tab-panel">
+      <h3>Export</h3>
+      <p>Excel export contains all 12 sheets (Survey Summary, Driver Platforms, Working Statistics, Earnings, Bonuses, Payments, Categories, Market Intelligence, Driver Experience, Screenshots, Raw Answers, Statistics), scoped to the current filters. Draft/abandoned surveys are excluded unless "include incomplete" is checked.</p>
+      <label><input type="checkbox" id="export-include-incomplete" /> Include incomplete (draft/abandoned) surveys</label>
+      <div class="export-buttons">
+        <button id="export-excel">⬇ Export Excel</button>
+        <div class="csv-export">
+          <select id="csv-sheet">
+            <option value="survey_summary">Survey Summary</option>
+            <option value="driver_platforms">Driver Platforms</option>
+            <option value="working_statistics">Working Statistics</option>
+            <option value="earnings">Earnings</option>
+            <option value="bonuses">Bonuses</option>
+            <option value="payments">Payments</option>
+            <option value="categories">Categories</option>
+            <option value="market_intelligence">Market Intelligence</option>
+            <option value="driver_experience">Driver Experience</option>
+            <option value="screenshots">Screenshots</option>
+            <option value="raw_answers">Raw Answers</option>
+            <option value="statistics">Statistics</option>
+          </select>
+          <button id="export-csv">⬇ Export CSV</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+x-app-image: &app-image
+  build: .
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    BOT_TOKEN: ${BOT_TOKEN}
+    SCREENSHOT_STORAGE_DIR: /data/screenshots
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ENVIRONMENT: ${ENVIRONMENT:-production}
+  volumes:
+    - screenshots:/data/screenshots
+  depends_on:
+    postgres:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: applies migrations, then exits. bot/web wait for this to
+  # finish successfully before they start, so the schema is never raced.
+  migrate:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  bot:
+    <<: *app-image
+    command: ["python", "-m", "telegram_bot.main"]
+    restart: unless-stopped
+
+  web:
+    <<: *app-image
+    command: ["uvicorn", "telegram_bot.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  screenshots:
