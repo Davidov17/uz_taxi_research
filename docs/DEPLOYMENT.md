@@ -315,3 +315,54 @@ docker compose exec bot python scripts/verify_production_flow.py --api-base http
 
 (This creates one real completed survey — don't point it at a database
 you need to stay pristine without expecting that.)
+
+## Alternative: free-tier webhook deployment (no Docker host required)
+
+Everything above assumes a host that can run `docker compose` and keep
+containers alive indefinitely. If instead you're deploying to a free-tier
+web host (e.g. Render) that only runs **one** persistent process per
+service and spins it down after a period of inactivity, use webhook mode
+instead of the docker-compose stack:
+
+- **Database**: any managed Postgres reachable over the internet (e.g.
+  [Neon](https://neon.tech) or [Supabase](https://supabase.com) both have a
+  permanent free tier) instead of the `postgres` container. Point
+  `DATABASE_URL` at it.
+- **Migrations**: run once from your own machine (or whenever a new
+  migration ships), the same as the `migrate` service does in Compose,
+  just pointed at the remote database instead of a local container:
+  ```bash
+  DATABASE_URL=<your Neon/Supabase URL> uv run alembic upgrade head
+  ```
+- **App**: deploy the single `telegram_bot.web.app:app` FastAPI process
+  (bot + dashboard combined into one, since a free web service only runs
+  one) — build from the same `Dockerfile`, override the start command to
+  `uvicorn telegram_bot.web.app:app --host 0.0.0.0 --port $PORT`. Set:
+
+  | Variable | Purpose |
+  |---|---|
+  | `DATABASE_URL` | your Neon/Supabase connection string |
+  | `BOT_TOKEN` | same as always |
+  | `PUBLIC_BASE_URL` | the host's public HTTPS URL (e.g. `https://your-app.onrender.com`) — setting this is what switches the bot from polling to webhook mode |
+  | `WEBHOOK_SECRET` | any random string; verified against Telegram's `X-Telegram-Bot-Api-Secret-Token` header on every webhook call so nobody else can POST fake updates to your bot |
+  | `SCREENSHOT_STORAGE_DIR` | a path on the host's local disk — **not persistent** on most free tiers (the filesystem resets on redeploy/restart); screenshots' Telegram `file_id` is still safe in the database either way (see Backups above) |
+
+  On startup, `web/app.py`'s lifespan calls `bot.set_webhook(...)`
+  automatically whenever `PUBLIC_BASE_URL` is set — no manual `setWebhook`
+  call needed, and nothing changes for the normal docker-compose bot
+  service (it never sets `PUBLIC_BASE_URL`, so it keeps long-polling).
+
+- **FSM state**: this mode (and the default `main.py` polling mode too)
+  persists in-progress survey answers to a `fsm_states` table instead of
+  process memory, specifically so a free-tier host waking from an idle
+  spin-down doesn't silently reset anyone mid-survey — see
+  `infrastructure/fsm_storage.py`.
+- **One bot token, one consumer at a time**: don't run this webhook
+  deployment and a docker-compose polling deployment against the *same*
+  `BOT_TOKEN` simultaneously — Telegram only delivers updates to whichever
+  mode most recently registered (`setWebhook` vs. `getUpdates`), and the
+  other will spin its wheels with `TelegramConflictError`. Pick one.
+- **Cold starts**: expect the first message/dashboard load after a quiet
+  period to be slow (the free host waking the process up, plus Neon/
+  Supabase's own database possibly waking from its own idle suspend) —
+  normal on these tiers, not a bug.

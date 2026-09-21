@@ -18,7 +18,11 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def _get_session_factory() -> async_sessionmaker[AsyncSession]:
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Public accessor so other in-process consumers (the webhook-mode
+    bot in web/app.py) share this same lazily-created engine/pool instead
+    of opening a second one — important on a memory-constrained free-tier
+    host running bot and dashboard in one process."""
     global _engine, _session_factory
     if _session_factory is None:
         _engine = make_engine()
@@ -27,7 +31,7 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    async with _get_session_factory()() as session:
+    async with get_session_factory()() as session:
         yield session
 
 
@@ -35,7 +39,7 @@ async def ping_db() -> None:
     """Used by the /health endpoint — a real round trip to Postgres, not
     just "the process is running", so a database outage shows up as an
     unhealthy container rather than a silently-broken bot/dashboard."""
-    async with _get_session_factory()() as session:
+    async with get_session_factory()() as session:
         await session.execute(text("SELECT 1"))
 
 

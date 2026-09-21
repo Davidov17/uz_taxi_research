@@ -26,13 +26,23 @@ STATIC_DIR = Path(__file__).parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
+    if settings.public_base_url:
+        from telegram_bot.web.bot_webhook import start_webhook, stop_webhook
+
+        await start_webhook()
     yield
+    if settings.public_base_url:
+        await stop_webhook()
     await dispose_engine()
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Driver Market Research — Admin Dashboard", lifespan=lifespan)
     app.include_router(api_router)
+    if settings.public_base_url:
+        from telegram_bot.web.bot_webhook import router as webhook_router
+
+        app.include_router(webhook_router)
 
     @app.get("/health")
     async def health() -> dict:

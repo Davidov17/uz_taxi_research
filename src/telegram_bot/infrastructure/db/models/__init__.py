@@ -9,6 +9,7 @@ from telegram_bot.infrastructure.db.models.bonus import Bonus
 from telegram_bot.infrastructure.db.models.driver_employment import DriverEmployment
 from telegram_bot.infrastructure.db.models.driver_experience import DriverExperience
 from telegram_bot.infrastructure.db.models.earnings import Earnings
+from telegram_bot.infrastructure.db.models.fsm_state import FsmState
 from telegram_bot.infrastructure.db.models.interviewer import Interviewer
 from telegram_bot.infrastructure.db.models.lookups import (
     City,
@@ -35,6 +36,7 @@ __all__ = [
     "DriverEmployment",
     "DriverExperience",
     "Earnings",
+    "FsmState",
     "Interviewer",
     "City",
     "DriverType",
