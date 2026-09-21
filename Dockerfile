@@ -18,6 +18,7 @@ COPY src ./src
 COPY migrations ./migrations
 COPY alembic.ini ./alembic.ini
 COPY scripts ./scripts
+COPY docker ./docker
 RUN uv sync --frozen --no-dev
 
 
@@ -35,11 +36,12 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # Screenshot storage lives on a mounted volume in production (see
 # docker-compose.yml); create it here too so a local `docker run` without
 # a volume still works, owned by the user the process actually runs as.
-RUN mkdir -p /data/screenshots && chown -R app:app /data /app
+RUN mkdir -p /data/screenshots && chown -R app:app /data /app && chmod +x /app/docker/entrypoint.sh
 
 USER app
 
-# No EXPOSE/CMD baked in as "the" entrypoint — docker-compose.yml sets an
-# explicit command per service (bot / web / one-shot migrate) against this
-# same image.
-CMD ["python", "-m", "telegram_bot.main"]
+# docker-compose.yml sets an explicit command per service (bot / web /
+# one-shot migrate) against this same image, overriding this default —
+# it only actually runs on a host with no per-service command of its own
+# (e.g. Render), where entrypoint.sh picks bot-vs-web based on $PORT.
+CMD ["/app/docker/entrypoint.sh"]
