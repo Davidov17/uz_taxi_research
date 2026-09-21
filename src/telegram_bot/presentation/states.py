@@ -1,8 +1,8 @@
-"""aiogram FSM states, one per logical phase of the flat 15-question flow.
+"""aiogram FSM states, one per logical phase of the flat questionnaire flow.
 
-`questionnaire` covers all 15 numbered questions (sections 2-16) — there's
-no more per-platform loop to give its own state, and which exact question
-is current is tracked by SurveySession.cursor (persisted via FSMContext
+`questionnaire` covers all numbered questions (see QUESTION_COUNT) — there's
+no per-platform loop to give its own state, and which exact question is
+current is tracked by SurveySession.cursor (persisted via FSMContext
 data), not by which aiogram State we're in. The State only needs to be
 coarse enough to route an incoming update to the survey handlers and back
 out again; SurveySession is the source of truth for exact position.
@@ -19,10 +19,10 @@ from telegram_bot.domain.questionnaire import QUESTION_COUNT, SCREENSHOTS_SECTIO
 
 class SurveyStates(StatesGroup):
     language_select = State()
-    setup = State()  # section 1: city, target_platform
-    questionnaire = State()  # sections 2..16: Q1-Q15
-    screenshots = State()  # section 17
-    review = State()  # section 18
+    setup = State()  # section 1: city
+    questionnaire = State()  # sections 2..(1 + QUESTION_COUNT)
+    screenshots = State()  # section SCREENSHOTS_SECTION_INDEX
+    review = State()  # section SCREENSHOTS_SECTION_INDEX + 1
 
 
 SECTION_TO_STATE = {1: SurveyStates.setup}

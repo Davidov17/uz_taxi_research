@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from telegram_bot.application.survey_session import SurveySession
 from telegram_bot.domain.i18n import t
-from telegram_bot.domain.questionnaire import QUESTIONS_BY_DISPLAY_NUMBER, SECTIONS_BY_INDEX, Question, localize
+from telegram_bot.domain.questionnaire import (
+    QUESTION_COUNT,
+    QUESTIONS_BY_DISPLAY_NUMBER,
+    SECTIONS_BY_INDEX,
+    Question,
+    localize,
+)
 from telegram_bot.infrastructure.db.models import Survey
 
 
@@ -24,11 +30,11 @@ def _option_labels(question: Question, values: list[str], lang: str) -> list[str
 
 
 def question_message(session: SurveySession, question: Question, lang: str) -> str:
-    """"Q{n}. {question text}" for the 15 numbered questions — the number
-    is part of the displayed text itself, not just a section label (see
+    """"Q{n}. {question text}" for the numbered questions — the number is
+    part of the displayed text itself, not just a section label (see
     docs/SURVEY_SPECIFICATION.md's UI numbering requirement). The
-    unnumbered setup/screenshot steps before Q1 and after Q15 fall back to
-    a plain section-title header instead.
+    unnumbered setup/screenshot steps before Q1 and after the last
+    question fall back to a plain section-title header instead.
     """
     body = localize(question.text, lang)
     if question.display_number is not None:
@@ -108,7 +114,7 @@ def _format_answer_for_review(session: SurveySession, question: Question, lang: 
             labels.append(sp.earnings.earnings_basis.name)
         return ", ".join(labels) if labels else not_answered
 
-    if code in ("market_awareness", "payout_methods", "driver_type_loyalty", "driver_motivation"):
+    if code in ("market_awareness", "driver_type_loyalty", "driver_motivation"):
         values = session.answer_options.get(code, [])
         labels = _option_labels(question, values, lang)
         return ", ".join(labels) if labels else not_answered
@@ -135,7 +141,7 @@ def format_review(session: SurveySession, lang: str) -> str:
         lines.append(f"• {sp.platform_other_name or sp.platform.name}")
     lines.append("")
 
-    for n in range(1, 16):
+    for n in range(1, QUESTION_COUNT + 1):
         question = QUESTIONS_BY_DISPLAY_NUMBER[n]
         lines.append(f"Q{n}:")
         lines.append(_format_answer_for_review(session, question, lang))

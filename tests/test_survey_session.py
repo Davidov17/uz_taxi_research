@@ -35,8 +35,6 @@ async def full_walkthrough(session: SurveySession, force: dict | None = None) ->
 
         if question.code in force:
             value = force[question.code]
-        elif question.code == "target_platform":
-            value = None  # optional, always skipped by default
         elif question.code == "has_screenshots":
             value = False  # generic walkthroughs skip the upload loop by default
         elif question.code == "hours_and_season":
@@ -85,7 +83,6 @@ async def test_setup_then_fifteen_questions_appear_in_fixed_order(session, inter
     conditional branch and no per-platform repeat."""
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    await s.skip(s.current_question())  # target_platform
 
     seen = []
     for _ in range(QUESTION_COUNT):
@@ -151,7 +148,6 @@ async def test_platforms_used_is_the_only_place_platforms_are_selected(session, 
     of how many platforms were selected."""
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    await s.skip(s.current_question())
     await s.answer(s.current_question(), [str(platform_yandex.id), str(platform_uklon.id)])
 
     q = s.current_question()
@@ -179,7 +175,6 @@ async def test_bonus_type_dont_know_leaves_receives_bonuses_null(session, interv
 async def test_hours_and_season_requires_exactly_one_of_each(session, interviewer, city, platform_yandex):
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    await s.skip(s.current_question())
     await s.answer(s.current_question(), [str(platform_yandex.id)])
     switch_q = s.current_question()
     await s.answer(switch_q, (await s.resolve_options(switch_q))[0].value)
@@ -204,7 +199,6 @@ async def test_hours_and_season_requires_exactly_one_of_each(session, interviewe
 async def test_hours_per_day_bucket_stores_structured_value_and_numeric_midpoint(session, interviewer, city, platform_yandex):
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    await s.skip(s.current_question())
     await s.answer(s.current_question(), [str(platform_yandex.id)])
     switch_q = s.current_question()
     await s.answer(switch_q, (await s.resolve_options(switch_q))[0].value)
@@ -225,7 +219,6 @@ async def test_hours_per_day_bucket_stores_structured_value_and_numeric_midpoint
 async def test_earnings_invalid_combination_raises_and_does_not_advance(session, interviewer, city, platform_yandex):
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    await s.skip(s.current_question())
     await s.answer(s.current_question(), [str(platform_yandex.id)])
     for _ in range(5):  # switch_frequency, best_experience, days_per_week, hours_and_season, main_category
         q = s.current_question()
@@ -261,7 +254,6 @@ async def test_earnings_invalid_combination_raises_and_does_not_advance(session,
 async def test_market_awareness_requires_at_least_one_selection(session, interviewer, city, platform_yandex):
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    await s.skip(s.current_question())
     await s.answer(s.current_question(), [str(platform_yandex.id)])
 
     while s.current_question().code != "market_awareness":
@@ -285,22 +277,25 @@ async def test_market_awareness_requires_at_least_one_selection(session, intervi
 async def test_back_does_not_lose_previously_entered_answers(session, interviewer, city, platform_yandex):
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
-    target_q = s.current_question()
-    assert target_q.code == "target_platform"
-    await s.answer(target_q, str(platform_yandex.id))
-    assert s.survey.target_platform_id == platform_yandex.id
+    await s.answer(s.current_question(), [str(platform_yandex.id)])  # platforms_used (Q1)
+
+    switch_q = s.current_question()
+    assert switch_q.code == "switch_frequency"
+    switch_value = (await s.resolve_options(switch_q))[0].value
+    await s.answer(switch_q, switch_value)
+    assert s.survey_platforms[0].switch_frequency_id == int(switch_value)
 
     q = s.current_question()
-    assert q.code == "platforms_used"
+    assert q.code == "best_experience"
 
     moved = s.go_back()
     assert moved is True
     back_q = s.current_question()
-    assert back_q.code == "target_platform"
+    assert back_q.code == "switch_frequency"
 
     # the previously given answer is still in the database, untouched by
     # simply moving backward
-    assert s.survey.target_platform_id == platform_yandex.id
+    assert s.survey_platforms[0].switch_frequency_id == int(switch_value)
 
 
 async def test_go_back_at_first_question_returns_false(session, interviewer):

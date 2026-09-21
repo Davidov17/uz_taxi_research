@@ -146,9 +146,9 @@ class Question:
     max_value: float | None = None
     help_text: LocalizedText | None = None
     platform_name_in_text: bool = False
-    # 1-15 for the interviewer-facing "Q{n}." numbering (see
+    # 1..QUESTION_COUNT for the interviewer-facing "Q{n}." numbering (see
     # presentation/formatters.py); None for the unnumbered setup/
-    # screenshot steps before Q1 and after Q15.
+    # screenshot steps before Q1 and after the last question.
     display_number: int | None = None
 
 
@@ -166,8 +166,8 @@ information is collected once, in Q1 (platforms_used); question_engine.py
 treats an empty tuple here as "there is no platform loop" — see
 _advance_section/_retreat_section."""
 
-QUESTION_COUNT = 15
-SCREENSHOTS_SECTION_INDEX = 17
+QUESTION_COUNT = 14
+SCREENSHOTS_SECTION_INDEX = 16
 
 # ---- shared option labels, reused across several questions ------------------
 
@@ -190,17 +190,6 @@ SECTIONS: tuple[Section, ...] = (
                 },
                 QuestionType.SINGLE_CHOICE,
                 options_source="cities",
-            ),
-            Question(
-                "target_platform",
-                {
-                    "en": "Is there a specific platform this interview is targeting? (optional)",
-                    "ru": "Ориентировано ли это интервью на конкретную платформу? (необязательно)",
-                    "uz": "Ushbu intervyu muayyan platformaga qaratilganmi? (ixtiyoriy)",
-                },
-                QuestionType.SINGLE_CHOICE,
-                required=False,
-                options_source="platforms",
             ),
         ),
     ),
@@ -411,9 +400,9 @@ SECTIONS: tuple[Section, ...] = (
             Question(
                 "commission_range",
                 {
-                    "en": "How much does each company take from the total ride fare? in other words, what is the commission fee percentage?",
-                    "ru": "Какую долю от полной стоимости поездки забирает каждая компания? Другими словами, какой процент комиссии?",
-                    "uz": "Har bir kompaniya umumiy yo'l haqidan qancha oladi? Boshqacha aytganda, komissiya foizi qancha?",
+                    "en": "What is the commission fee percentage each company takes from the total ride fare?",
+                    "ru": "Какой процент комиссии берёт каждая компания от полной стоимости поездки?",
+                    "uz": "Har bir kompaniya umumiy yo'l haqidan necha foiz komissiya oladi?",
                 },
                 QuestionType.SINGLE_CHOICE,
                 options=(
@@ -591,47 +580,7 @@ SECTIONS: tuple[Section, ...] = (
     ),
     Section(
         index=14,
-        title={"en": "Q13. Payment / commission payout", "ru": "В13. Выплаты / комиссия", "uz": "S13. To'lov / komissiya"},
-        scope=SectionScope.SURVEY,
-        questions=(
-            Question(
-                "payout_methods",
-                {
-                    "en": "How does the ride-hailing platform make commission payouts to drivers (and, if cash payments are available, collect money from drivers)?",
-                    "ru": "Как платформа такси выплачивает деньги водителям (и, если доступна оплата наличными, как собирает деньги с водителей)?",
-                    "uz": "Taksi platformasi haydovchilarga to'lovlarni qanday amalga oshiradi (va agar naqd pul to'lovlari mavjud bo'lsa, haydovchilardan pulni qanday yig'adi)?",
-                },
-                QuestionType.MULTI_CHOICE,
-                options=(
-                    LocalizedOption(
-                        "weekly_bank_account",
-                        {"en": "Weekly bank account", "ru": "Еженедельно на банковский счёт", "uz": "Har hafta bank hisobiga"},
-                    ),
-                    LocalizedOption(
-                        "early_cashout", {"en": "Early cash-out", "ru": "Досрочный вывод средств", "uz": "Erta pul yechish"}
-                    ),
-                    LocalizedOption("driver_card", {"en": "Driver card", "ru": "Карта водителя", "uz": "Haydovchi kartasi"}),
-                    LocalizedOption(
-                        "bank_transfer", {"en": "Bank transfer", "ru": "Банковский перевод", "uz": "Bank o'tkazmasi"}
-                    ),
-                    LocalizedOption(
-                        "mobile_money", {"en": "Mobile money", "ru": "Мобильные деньги", "uz": "Mobil pul"}
-                    ),
-                    LocalizedOption("atm", {"en": "ATM", "ru": "Банкомат", "uz": "Bankomat"}),
-                    LocalizedOption(
-                        "collection_point", {"en": "Collection point", "ru": "Пункт сбора", "uz": "Yig'ish punkti"}
-                    ),
-                    LocalizedOption("cash", {"en": "Cash", "ru": "Наличные", "uz": "Naqd pul"}),
-                    LocalizedOption("other", _OTHER),
-                    LocalizedOption("dont_know", _DONT_KNOW),
-                ),
-                display_number=13,
-            ),
-        ),
-    ),
-    Section(
-        index=15,
-        title={"en": "Q14. Driver type and loyalty", "ru": "В14. Тип водителя и лояльность", "uz": "S14. Haydovchi turi va sodiqlik"},
+        title={"en": "Q13. Driver type and loyalty", "ru": "В13. Тип водителя и лояльность", "uz": "S13. Haydovchi turi va sodiqlik"},
         scope=SectionScope.SURVEY,
         questions=(
             Question(
@@ -665,13 +614,13 @@ SECTIONS: tuple[Section, ...] = (
                     ),
                     LocalizedOption("dont_know", _DONT_KNOW),
                 ),
-                display_number=14,
+                display_number=13,
             ),
         ),
     ),
     Section(
-        index=16,
-        title={"en": "Q15. Driver experience / motivation", "ru": "В15. Опыт водителя / мотивация", "uz": "S15. Haydovchi tajribasi / motivatsiya"},
+        index=15,
+        title={"en": "Q14. Driver experience / motivation", "ru": "В14. Опыт водителя / мотивация", "uz": "S14. Haydovchi tajribasi / motivatsiya"},
         scope=SectionScope.SURVEY,
         questions=(
             Question(
@@ -744,12 +693,12 @@ SECTIONS: tuple[Section, ...] = (
                     ),
                     LocalizedOption("dont_know", _DONT_KNOW),
                 ),
-                display_number=15,
+                display_number=14,
             ),
         ),
     ),
     Section(
-        index=17,
+        index=16,
         title={
             "en": "Driver statistics / screenshots",
             "ru": "Статистика водителя / скриншоты",
@@ -769,7 +718,7 @@ SECTIONS: tuple[Section, ...] = (
         ),
     ),
     Section(
-        index=18,
+        index=17,
         title={"en": "Review and submission", "ru": "Проверка и отправка", "uz": "Ko'rib chiqish va yuborish"},
         scope=SectionScope.SURVEY,
         questions=(),
@@ -781,7 +730,7 @@ SECTIONS_BY_INDEX: dict[int, Section] = {s.index: s for s in SECTIONS}
 QUESTIONS_BY_DISPLAY_NUMBER: dict[int, Question] = {
     q.display_number: q for s in SECTIONS for q in s.questions if q.display_number is not None
 }
-assert len(QUESTIONS_BY_DISPLAY_NUMBER) == QUESTION_COUNT, "the questionnaire must have exactly 15 numbered questions"
+assert len(QUESTIONS_BY_DISPLAY_NUMBER) == QUESTION_COUNT, "QUESTIONS_BY_DISPLAY_NUMBER must match QUESTION_COUNT exactly"
 
 
 def visible_questions(section: Section, answers_view: dict[str, Any]) -> list[Question]:

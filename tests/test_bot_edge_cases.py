@@ -126,16 +126,11 @@ def sent_message_count(bot) -> int:
 
 
 # ---- BOT TESTS: skip -------------------------------------------------------------
-
-
-async def test_skip_optional_question_via_handler(dp, bot, session, city, platform_yandex):
-    user = make_user(31001)
-    await seed_dispatcher_at(
-        dp, bot, session, user, city=city, platform_ids=[], target_code="target_platform"
-    )
-    await send_callback(dp, bot, user, "skip")
-    text = last_text(bot)
-    assert "q1." in text.lower()  # advanced past the optional target_platform straight to Q1
+#
+# There's no longer any optional/skippable question in the live flow
+# (target_platform, the only one, was removed) — "skip succeeds" has no
+# live question left to test against, so only the rejection path below
+# (skip on a required question) remains exercisable.
 
 
 async def test_skip_required_question_is_rejected(dp, bot, session, city, platform_yandex):
@@ -323,28 +318,27 @@ async def test_bonus_type_none_stores_no_bonuses_via_handler(dp, bot, session, c
 
 
 # ---- EDGE CASES: duplicate/repeated Telegram updates (general, not screenshot-specific) --
+#
+# General "duplicate stale button tap" protection is exercised elsewhere
+# too, in a still-live mechanism — see test_submission_flow.py's
+# test_duplicate_confirm_tap_via_handler_shows_existing_survey_id — and
+# for skip specifically:
 
 
-async def test_double_tap_skip_does_not_double_advance_or_crash(dp, bot, session, city, platform_yandex):
-    """A Telegram retry / accidental double-tap of the same button must
-    not silently move the survey forward twice or error out — the second
-    tap should land on whatever question is now current without crashing.
-    """
+async def test_double_tap_skip_is_rejected_both_times(dp, bot, session, city, platform_yandex):
+    """Two consecutive stale/duplicate "skip" taps on a required question
+    must both be safely rejected (alert, no new message), never crash or
+    silently advance past it."""
     user = make_user(31009)
     await seed_dispatcher_at(
-        dp, bot, session, user, city=city, platform_ids=[], target_code="target_platform"
+        dp, bot, session, user, city=city, platform_ids=[str(platform_yandex.id)], target_code="switch_frequency"
     )
-    await send_callback(dp, bot, user, "skip")  # advances past the optional target_platform
-    first_text = last_text(bot)
-    assert "q1." in first_text.lower()
     before = sent_message_count(bot)
 
-    # Now on Q1 (platforms_used), a required MULTI_CHOICE question with no
-    # skip button — a stale/duplicate "skip" tap must be rejected (alert,
-    # no new message), not silently double-advance past a required question.
     await send_callback(dp, bot, user, "skip")
-    assert sent_message_count(bot) == before
-    assert last_text(bot) == first_text
+    await send_callback(dp, bot, user, "skip")
 
+    assert sent_message_count(bot) == before
     alerts = [c for c in bot.session.calls if type(c).__name__ == "AnswerCallbackQuery"]
-    assert alerts and alerts[-1].show_alert is True
+    assert len(alerts) == 2
+    assert all(a.show_alert is True for a in alerts)

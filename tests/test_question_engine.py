@@ -52,24 +52,23 @@ def test_start_position_is_section_one_question_zero():
     assert pos.platform_pos is None
 
 
-def test_section_one_has_two_questions_in_order():
+def test_section_one_has_only_city():
     view = make_view()
     pos = start_position()
     q0 = current_question(pos, view)
     assert q0.code == "city"
     pos = next_position(pos, view, platform_count=0)
-    q1 = current_question(pos, view)
-    assert q1.code == "target_platform"
+    assert pos.section_index == 2
+    assert current_question(pos, view).code == "platforms_used"
 
 
-def test_fifteen_questions_in_order_regardless_of_answers():
+def test_questions_in_order_regardless_of_answers():
     """The core requirement of the redesign: every respondent sees exactly
-    Q1..Q15 in the same order, with no conditional branching and no
+    Q1..Qn in the same order, with no conditional branching and no
     per-platform repeats — the view's content must not change the path."""
     for survey_answers in ({}, {"platforms_used_includes_other": True}, {"receives_bonuses": False}):
         view = make_view(survey_answers)
         pos = start_position()
-        pos = next_position(pos, view, platform_count=0)  # target_platform
         visited = []
         for _ in range(QUESTION_COUNT):
             pos = next_position(pos, view, platform_count=0)
@@ -79,13 +78,12 @@ def test_fifteen_questions_in_order_regardless_of_answers():
         assert visited == EXPECTED_CODES_IN_ORDER
 
 
-def test_question_count_is_exactly_fifteen():
-    assert QUESTION_COUNT == 15
-    assert len(QUESTIONS_BY_DISPLAY_NUMBER) == 15
-    assert list(QUESTIONS_BY_DISPLAY_NUMBER.keys()) == list(range(1, 16))
+def test_question_count_is_internally_consistent():
+    assert len(QUESTIONS_BY_DISPLAY_NUMBER) == QUESTION_COUNT
+    assert list(QUESTIONS_BY_DISPLAY_NUMBER.keys()) == list(range(1, QUESTION_COUNT + 1))
 
 
-def test_all_fifteen_questions_have_display_numbers_matching_their_key():
+def test_all_questions_have_display_numbers_matching_their_key():
     for n, question in QUESTIONS_BY_DISPLAY_NUMBER.items():
         assert question.display_number == n
 
@@ -93,9 +91,8 @@ def test_all_fifteen_questions_have_display_numbers_matching_their_key():
 def test_after_last_question_comes_screenshots_then_review():
     view = make_view()
     pos = start_position()
-    pos = next_position(pos, view, platform_count=0)  # target_platform
-    pos = walk_forward(pos, view, QUESTION_COUNT)  # Q1..Q15
-    assert current_question(pos, view).code == "driver_motivation"  # Q15, last question
+    pos = walk_forward(pos, view, QUESTION_COUNT)  # Q1..Qn
+    assert current_question(pos, view).code == "driver_motivation"  # last question
     pos = next_position(pos, view, platform_count=0)
     assert pos.section_index == SCREENSHOTS_SECTION_INDEX
     assert current_question(pos, view).code == "has_screenshots"
@@ -123,7 +120,7 @@ def test_prev_at_very_first_question_returns_none():
 def test_forward_through_entire_questionnaire_then_all_the_way_back():
     view = make_view()
     pos = start_position()
-    total_steps = 1 + QUESTION_COUNT + 1  # target_platform + Q1..Q15 + has_screenshots
+    total_steps = QUESTION_COUNT + 1  # Q1..Qn + has_screenshots
     forward = walk_forward(pos, view, n=total_steps)
     back = forward
     for _ in range(total_steps):

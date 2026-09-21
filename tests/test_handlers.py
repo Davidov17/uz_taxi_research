@@ -74,8 +74,6 @@ async def test_full_platform_selection_creates_survey_platform_rows(dp, bot, ses
 
     # answer city (first available single-choice option)
     await send_callback(dp, bot, user, "ans:1")
-    # skip target_platform (optional)
-    await send_callback(dp, bot, user, "skip")
 
     # now on platforms_used (multi-choice): toggle both platforms, then Done
     await send_callback(dp, bot, user, f"tgl:{platform_yandex.id}")
@@ -96,7 +94,7 @@ async def test_back_button_returns_to_previous_section(dp, bot):
     await begin_survey_in_english(dp, bot, user)
     await send_callback(dp, bot, user, "ans:1")  # city
     text_after_city = last_sent_text(bot)
-    assert "target_platform" in text_after_city.lower() or "target platform" in text_after_city.lower() or "specific platform" in text_after_city.lower()
+    assert "Q1." in text_after_city  # now on platforms_used
 
     await send_callback(dp, bot, user, "back")
     text_after_back = last_sent_text(bot)

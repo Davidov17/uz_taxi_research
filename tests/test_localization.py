@@ -80,8 +80,8 @@ async def test_language_persists_when_resuming_a_draft_via_start(dp, bot, sessio
     await send_text(dp, bot, user, "/start")
     text = last_message(bot).text
     assert "выберите язык" not in text.lower()  # not stuck on the language picker
-    # the re-rendered current question (target_platform) is still in Russian
-    assert "платформ" in text.lower()
+    # the re-rendered current question (platforms_used, Q1) is still in Russian
+    assert "приложени" in text.lower()
 
 
 async def test_language_persists_across_back_navigation(dp, bot):
@@ -127,12 +127,23 @@ async def test_navigation_buttons_localized(dp, bot, lang_code, back_label, skip
     user = make_user(41030 + hash(lang_code) % 1000)
     await send_text(dp, bot, user, "/start")
     await send_callback(dp, bot, user, f"lang:{lang_code}")
-    await send_callback(dp, bot, user, "ans:1")  # city -> target_platform (optional, has Back+Skip)
+    await send_callback(dp, bot, user, "ans:1")  # city -> platforms_used (required, has Back but no Skip)
 
     keyboard = last_message(bot).reply_markup
     labels = {btn.text for row in keyboard.inline_keyboard for btn in row}
     assert back_label in labels
-    assert skip_label in labels
+
+    # No question in the current flat questionnaire is optional any more
+    # (target_platform, the only one, was removed), so Skip's label can't
+    # be exercised through a live question — check the keyboard builder
+    # directly instead, the same function the live flow would call for
+    # a required=False question if one existed.
+    from telegram_bot.domain.questionnaire import Option
+    from telegram_bot.presentation.keyboards import single_choice_kb
+
+    kb = single_choice_kb([Option("1", "x")], lang_code, allow_back=True, allow_skip=True)
+    skip_labels = {btn.text for row in kb.inline_keyboard for btn in row}
+    assert skip_label in skip_labels
 
 
 # ---- service-layer: language selection stored on the Survey row -----------

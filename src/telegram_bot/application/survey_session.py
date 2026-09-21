@@ -517,7 +517,7 @@ class SurveySession:
             if sp and sp.earnings and sp.earnings.earnings_basis_id is not None:
                 selected.add(str(sp.earnings.earnings_basis_id))
             return selected
-        if code in ("market_awareness", "payout_methods", "driver_type_loyalty", "driver_motivation"):
+        if code in ("market_awareness", "driver_type_loyalty", "driver_motivation"):
             return set(self.answer_options.get(code, []))
         return set()
 
@@ -641,10 +641,6 @@ class SurveySession:
                 self.survey.city_id = city.id
             return
 
-        if code == "target_platform":
-            self.survey.target_platform_id = int(raw_value)
-            return
-
         if code == "platforms_used":
             await self._answer_platforms_used(raw_value)
             return
@@ -739,11 +735,6 @@ class SurveySession:
                 payment = await self._get_or_create_payment(sp)
                 payment.cash_pct = midpoint
             await self._set_answer_option(code, raw_value)
-            return
-
-        if code == "payout_methods":
-            values = _require_at_least_one(raw_value)
-            await self._set_answer_options(code, values)
             return
 
         if code == "driver_type_loyalty":
