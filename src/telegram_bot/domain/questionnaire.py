@@ -430,9 +430,9 @@ SECTIONS: tuple[Section, ...] = (
             Question(
                 "earnings",
                 {
-                    "en": "On average, how much are you making each week with this app? How much are you making in total each week?",
-                    "ru": "В среднем, сколько вы зарабатываете в неделю с этим приложением? Сколько вы зарабатываете всего в неделю?",
-                    "uz": "O'rtacha, ushbu ilova bilan haftasiga qancha ishlaysiz? Haftasiga jami qancha ishlaysiz?",
+                    "en": "On average, how much are you making each week with this app?",
+                    "ru": "В среднем, сколько вы зарабатываете в неделю с этим приложением?",
+                    "uz": "O'rtacha, ushbu ilova bilan haftasiga qancha ishlaysiz?",
                 },
                 QuestionType.MULTI_CHOICE,
                 options=(
