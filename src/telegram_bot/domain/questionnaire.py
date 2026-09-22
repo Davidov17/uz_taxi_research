@@ -166,8 +166,8 @@ information is collected once, in Q1 (platforms_used); question_engine.py
 treats an empty tuple here as "there is no platform loop" — see
 _advance_section/_retreat_section."""
 
-QUESTION_COUNT = 14
-SCREENSHOTS_SECTION_INDEX = 16
+QUESTION_COUNT = 13
+SCREENSHOTS_SECTION_INDEX = 15
 
 # ---- shared option labels, reused across several questions ------------------
 
@@ -508,52 +508,7 @@ SECTIONS: tuple[Section, ...] = (
     ),
     Section(
         index=12,
-        title={"en": "Q11. Market awareness", "ru": "В11. Осведомлённость о рынке", "uz": "S11. Bozor haqida xabardorlik"},
-        scope=SectionScope.SURVEY,
-        questions=(
-            Question(
-                "market_awareness",
-                {
-                    "en": "Which of the following do you know about the ride-hailing market?",
-                    "ru": "Что из перечисленного вам известно о рынке такси?",
-                    "uz": "Quyidagilardan qaysi biri sizga taksi bozori haqida ma'lum?",
-                },
-                QuestionType.MULTI_CHOICE,
-                options=(
-                    LocalizedOption(
-                        "competitor_discounts",
-                        {
-                            "en": "Competitors offer rider discounts",
-                            "ru": "Конкуренты предлагают скидки пассажирам",
-                            "uz": "Raqobatchilar yo'lovchilarga chegirmalar taklif qiladi",
-                        },
-                    ),
-                    LocalizedOption(
-                        "knows_driver_count",
-                        {
-                            "en": "I know the approximate number of drivers on a platform",
-                            "ru": "Я знаю примерное количество водителей на платформе",
-                            "uz": "Men platformadagi taxminiy haydovchilar sonini bilaman",
-                        },
-                    ),
-                    LocalizedOption(
-                        "knows_market_leader",
-                        {
-                            "en": "I know the market leader",
-                            "ru": "Я знаю лидера рынка",
-                            "uz": "Men bozor yetakchisini bilaman",
-                        },
-                    ),
-                    LocalizedOption("dont_know", {"en": "I don't know", "ru": "Я не знаю", "uz": "Bilmayman"}),
-                    LocalizedOption("other", _OTHER),
-                ),
-                display_number=11,
-            ),
-        ),
-    ),
-    Section(
-        index=13,
-        title={"en": "Q12. Cash payments", "ru": "В12. Оплата наличными", "uz": "S12. Naqd to'lovlar"},
+        title={"en": "Q11. Cash payments", "ru": "В11. Оплата наличными", "uz": "S11. Naqd to'lovlar"},
         scope=SectionScope.SURVEY,
         questions=(
             Question(
@@ -574,13 +529,13 @@ SECTIONS: tuple[Section, ...] = (
                     LocalizedOption("100", {"en": "100%", "ru": "100%", "uz": "100%"}),
                     LocalizedOption("dont_know", _DONT_KNOW),
                 ),
-                display_number=12,
+                display_number=11,
             ),
         ),
     ),
     Section(
-        index=14,
-        title={"en": "Q13. Driver type and loyalty", "ru": "В13. Тип водителя и лояльность", "uz": "S13. Haydovchi turi va sodiqlik"},
+        index=13,
+        title={"en": "Q12. Driver type and loyalty", "ru": "В12. Тип водителя и лояльность", "uz": "S12. Haydovchi turi va sodiqlik"},
         scope=SectionScope.SURVEY,
         questions=(
             Question(
@@ -614,13 +569,13 @@ SECTIONS: tuple[Section, ...] = (
                     ),
                     LocalizedOption("dont_know", _DONT_KNOW),
                 ),
-                display_number=13,
+                display_number=12,
             ),
         ),
     ),
     Section(
-        index=15,
-        title={"en": "Q14. Driver experience / motivation", "ru": "В14. Опыт водителя / мотивация", "uz": "S14. Haydovchi tajribasi / motivatsiya"},
+        index=14,
+        title={"en": "Q13. Driver experience / motivation", "ru": "В13. Опыт водителя / мотивация", "uz": "S13. Haydovchi tajribasi / motivatsiya"},
         scope=SectionScope.SURVEY,
         questions=(
             Question(
@@ -693,12 +648,12 @@ SECTIONS: tuple[Section, ...] = (
                     ),
                     LocalizedOption("dont_know", _DONT_KNOW),
                 ),
-                display_number=14,
+                display_number=13,
             ),
         ),
     ),
     Section(
-        index=16,
+        index=15,
         title={
             "en": "Driver statistics / screenshots",
             "ru": "Статистика водителя / скриншоты",
@@ -718,7 +673,7 @@ SECTIONS: tuple[Section, ...] = (
         ),
     ),
     Section(
-        index=17,
+        index=16,
         title={"en": "Review and submission", "ru": "Проверка и отправка", "uz": "Ko'rib chiqish va yuborish"},
         scope=SectionScope.SURVEY,
         questions=(),

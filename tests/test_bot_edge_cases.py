@@ -269,7 +269,7 @@ async def test_days_per_week_back_navigation_still_works(dp, bot, session, city,
 async def test_bonus_type_yes_stores_receives_bonuses_and_advances_via_handler(dp, bot, session, city, platform_yandex):
     """bonus_type (Q10) has no conditional follow-up any more — choosing a
     "yes" option just records receives_bonuses=True on the platform's Bonus
-    row and moves straight on to Q11 (market_awareness)."""
+    row and moves straight on to Q11 (cash_pct)."""
     user = make_user(31003)
     await seed_dispatcher_at(
         dp, bot, session, user, city=city, platform_ids=[str(platform_yandex.id)], target_code="bonus_type"

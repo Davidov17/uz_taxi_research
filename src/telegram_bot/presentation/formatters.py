@@ -114,7 +114,7 @@ def _format_answer_for_review(session: SurveySession, question: Question, lang: 
             labels.append(sp.earnings.earnings_basis.name)
         return ", ".join(labels) if labels else not_answered
 
-    if code in ("market_awareness", "driver_type_loyalty", "driver_motivation"):
+    if code in ("driver_type_loyalty", "driver_motivation"):
         values = session.answer_options.get(code, [])
         labels = _option_labels(question, values, lang)
         return ", ".join(labels) if labels else not_answered

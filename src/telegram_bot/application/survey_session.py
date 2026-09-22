@@ -517,7 +517,7 @@ class SurveySession:
             if sp and sp.earnings and sp.earnings.earnings_basis_id is not None:
                 selected.add(str(sp.earnings.earnings_basis_id))
             return selected
-        if code in ("market_awareness", "driver_type_loyalty", "driver_motivation"):
+        if code in ("driver_type_loyalty", "driver_motivation"):
             return set(self.answer_options.get(code, []))
         return set()
 
@@ -722,11 +722,6 @@ class SurveySession:
                 bonus = await self._get_or_create_bonus(sp)
                 bonus.receives_bonuses = receives
             await self._set_answer_option(code, raw_value)
-            return
-
-        if code == "market_awareness":
-            values = _require_at_least_one(raw_value)
-            await self._set_answer_options(code, values)
             return
 
         if code == "cash_pct":

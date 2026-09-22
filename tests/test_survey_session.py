@@ -138,7 +138,7 @@ async def test_full_survey_two_platforms_persists_everything(session, interviewe
         await session.execute(select(SurveyAnswerOption).where(SurveyAnswerOption.survey_id == s.survey.id))
     ).scalars().all()
     codes = {row.question_code for row in answer_option_rows}
-    assert "market_awareness" in codes
+    assert "driver_type_loyalty" in codes
     assert "driver_motivation" in codes
 
 
@@ -251,12 +251,12 @@ async def test_earnings_invalid_combination_raises_and_does_not_advance(session,
     assert earnings_rows[0].earnings_basis_id is None
 
 
-async def test_market_awareness_requires_at_least_one_selection(session, interviewer, city, platform_yandex):
+async def test_driver_motivation_requires_at_least_one_selection(session, interviewer, city, platform_yandex):
     s = await new_session(session, interviewer)
     await s.answer(s.current_question(), str(city.id))
     await s.answer(s.current_question(), [str(platform_yandex.id)])
 
-    while s.current_question().code != "market_awareness":
+    while s.current_question().code != "driver_motivation":
         q = s.current_question()
         if q.code == "hours_and_season":
             await s.answer(q, ["7_8", "same_year_round"])
@@ -264,6 +264,8 @@ async def test_market_awareness_requires_at_least_one_selection(session, intervi
             options = await s.resolve_options(q)
             basis = next(o.value for o in options if o.value.isdigit())
             await s.answer(q, ["500k_1m", basis])
+        elif q.qtype == QuestionType.MULTI_CHOICE:
+            await s.answer(q, [(await s.resolve_options(q))[0].value])
         else:
             await s.answer(q, (await s.resolve_options(q))[0].value)
 
