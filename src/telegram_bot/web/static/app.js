@@ -9,8 +9,11 @@ const state = {
   cities: [],
   platforms: [],
   languages: [],
+  driverTypes: [],
   surveyPage: 0,
   surveyPageSize: 20,
+  screenshotPage: 0,
+  screenshotPageSize: 24,
 };
 
 const CHART_COLORS = ["#2563eb", "#f97316", "#16a34a", "#dc2626", "#7c3aed", "#0891b2", "#ca8a04"];
@@ -20,11 +23,13 @@ function currentFilters() {
   const params = new URLSearchParams();
   const city = document.getElementById("filter-city").value;
   const platform = document.getElementById("filter-platform").value;
+  const driverType = document.getElementById("filter-driver-type").value;
   const language = document.getElementById("filter-language").value;
   const dateFrom = document.getElementById("filter-date-from").value;
   const dateTo = document.getElementById("filter-date-to").value;
   if (city) params.set("city_id", city);
   if (platform) params.set("platform_id", platform);
+  if (driverType) params.set("driver_type_id", driverType);
   if (language) params.set("language", language);
   if (dateFrom) params.set("date_from", dateFrom);
   if (dateTo) params.set("date_to", dateTo);
@@ -69,6 +74,7 @@ function initTabs() {
 async function loadReferenceData() {
   state.cities = await getJSON("/api/cities");
   state.platforms = await getJSON("/api/platforms");
+  state.driverTypes = await getJSON("/api/driver-types");
   state.languages = await getJSON("/api/languages");
 
   const citySelect = document.getElementById("filter-city");
@@ -84,6 +90,13 @@ async function loadReferenceData() {
     opt.value = p.id;
     opt.textContent = p.name;
     platformSelect.appendChild(opt);
+  }
+  const driverTypeSelect = document.getElementById("filter-driver-type");
+  for (const d of state.driverTypes) {
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.name;
+    driverTypeSelect.appendChild(opt);
   }
   const languageSelect = document.getElementById("filter-language");
   for (const l of state.languages) {
@@ -148,15 +161,31 @@ function renderValueBarChart(canvasId, valuesByLabel, unit) {
   });
 }
 
-// ---- OVERVIEW -------------------------------------------------------------------
+// ---- EXECUTIVE (formerly "Overview") -----------------------------------------
 
 async function renderOverview() {
-  const data = await getJSON("/api/overview", currentFilters());
-  document.getElementById("ov-total").textContent = fmtNum(data.total_surveys);
-  document.getElementById("ov-completed").textContent = fmtNum(data.completed_surveys);
-  renderBarChart("chart-by-city", data.surveys_by_city);
-  renderBarChart("chart-by-platform", data.surveys_by_platform);
-  renderBarChart("chart-by-language", data.surveys_by_language);
+  const filters = currentFilters();
+  const [overview, executive, questionnaire] = await Promise.all([
+    getJSON("/api/overview", filters),
+    getJSON("/api/executive-summary", filters),
+    getJSON("/api/questionnaire-stats", filters),
+  ]);
+
+  renderBarChart("chart-by-city", overview.surveys_by_city);
+  renderBarChart("chart-by-platform", overview.surveys_by_platform);
+  renderBarChart("chart-by-language", overview.surveys_by_language);
+
+  document.getElementById("kpi-respondents").textContent = fmtNum(executive.total_respondents);
+  document.getElementById("kpi-multi-platform").textContent = `${fmtNum(executive.multi_platform_pct, 1)}%`;
+  document.getElementById("kpi-top-platform").textContent = executive.most_used_platform || "—";
+  document.getElementById("kpi-switch").textContent = `${fmtNum(executive.switch_willingness_pct, 1)}%`;
+  document.getElementById("kpi-screenshots").textContent = `${fmtNum(executive.screenshot_share_pct, 1)}%`;
+  document.getElementById("kpi-top-request").textContent = executive.top_improvement_request || "—";
+
+  renderBarChart("chart-platform-count", questionnaire.platform_count_distribution);
+  renderBarChart("chart-employment-relationship", questionnaire.employment_relationship);
+  renderBarChart("chart-loyalty-program", questionnaire.loyalty_program);
+  renderBarChart("chart-driver-motivation", questionnaire.driver_motivation, { horizontal: true });
 }
 
 // ---- DRIVER ECONOMICS -------------------------------------------------------------
@@ -212,6 +241,61 @@ async function renderPlatform() {
     { Cash: data.cash_pct, Digital: data.digital_pct },
     "%"
   );
+}
+
+// ---- SCREENSHOTS --------------------------------------------------------------
+
+function screenshotCard(item) {
+  const thumb = item.cached_locally
+    ? `<img class="thumb" src="/api/screenshots/${item.attachment_id}/image" alt="Screenshot ${item.attachment_id}" loading="lazy" />`
+    : `<div class="thumb-placeholder">Not cached locally<br />(metadata only)</div>`;
+  const desc = item.description ? escapeHtml(item.description) : "—";
+  return `
+    <div class="screenshot-card">
+      ${thumb}
+      <div class="meta">
+        <strong>#${item.attachment_id}</strong>
+        <span>${item.platform || "Unspecified platform"} · ${item.city}</span>
+        <span class="muted">${fmtDate(item.uploaded_at)}</span>
+        <span>${desc}</span>
+        <a href="#" data-survey-id="${item.survey_id}" class="ss-survey-link">View survey ${item.survey_id} →</a>
+      </div>
+    </div>
+  `;
+}
+
+async function renderScreenshots() {
+  const params = currentFilters();
+  params.set("page", state.screenshotPage);
+  params.set("page_size", state.screenshotPageSize);
+  const data = await getJSON("/api/screenshots", params);
+
+  document.getElementById("ss-submitted").textContent = fmtNum(data.summary.submitted);
+  document.getElementById("ss-total").textContent = fmtNum(data.summary.total_respondents);
+  document.getElementById("ss-pct").textContent = `${fmtNum(data.summary.pct, 1)}%`;
+
+  renderBarChart("chart-screenshots-platform", data.by_platform);
+  renderBarChart("chart-screenshots-city", data.by_city);
+  renderBarChart("chart-screenshots-date", data.by_date);
+
+  const gallery = document.getElementById("screenshot-gallery");
+  if (data.items.length === 0) {
+    gallery.innerHTML = `<p class="muted">No screenshots in the current filter.</p>`;
+  } else {
+    gallery.innerHTML = data.items.map(screenshotCard).join("");
+    gallery.querySelectorAll(".ss-survey-link").forEach((link) => {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        document.querySelector('.tab-link[data-tab="raw"]').click();
+        renderSurveyDetail(link.dataset.surveyId);
+      });
+    });
+  }
+
+  const totalPages = Math.max(1, Math.ceil(data.total / state.screenshotPageSize));
+  document.getElementById("ss-page-info").textContent = `Page ${state.screenshotPage + 1} of ${totalPages} (${data.total} screenshots)`;
+  document.getElementById("ss-prev-page").disabled = state.screenshotPage === 0;
+  document.getElementById("ss-next-page").disabled = state.screenshotPage + 1 >= totalPages;
 }
 
 // ---- QUALITATIVE -----------------------------------------------------------------
@@ -350,8 +434,9 @@ function initExport() {
 // ---- wiring -----------------------------------------------------------------------
 
 async function refreshAll() {
-  await Promise.all([renderOverview(), renderEconomics(), renderPlatform(), renderQualitative()]);
+  await Promise.all([renderOverview(), renderEconomics(), renderPlatform(), renderQualitative(), renderScreenshots()]);
   state.surveyPage = 0;
+  state.screenshotPage = 0;
   await renderSurveyList();
 }
 
@@ -363,6 +448,7 @@ function initFilters() {
   document.getElementById("clear-filters").addEventListener("click", () => {
     document.getElementById("filter-city").value = "";
     document.getElementById("filter-platform").value = "";
+    document.getElementById("filter-driver-type").value = "";
     document.getElementById("filter-language").value = "";
     document.getElementById("filter-date-from").value = "";
     document.getElementById("filter-date-to").value = "";
@@ -377,6 +463,16 @@ function initFilters() {
   document.getElementById("next-page").addEventListener("click", () => {
     state.surveyPage += 1;
     renderSurveyList();
+  });
+  document.getElementById("ss-prev-page").addEventListener("click", () => {
+    if (state.screenshotPage > 0) {
+      state.screenshotPage -= 1;
+      renderScreenshots();
+    }
+  });
+  document.getElementById("ss-next-page").addEventListener("click", () => {
+    state.screenshotPage += 1;
+    renderScreenshots();
   });
 }
 

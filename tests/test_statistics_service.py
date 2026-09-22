@@ -486,8 +486,6 @@ async def test_new_15q_survey_via_survey_session_feeds_dashboard_stats(session, 
         q = s.current_question()
         if q.code == "city":
             await s.answer(q, str(city.id))
-        elif q.code == "target_platform":
-            await s.skip(q)
         elif q.code == "platforms_used":
             await s.answer(q, [str(platform_yandex.id)])
         elif q.code == "hours_and_season":
@@ -525,6 +523,156 @@ async def test_new_15q_survey_via_survey_session_feeds_dashboard_stats(session, 
     # Q6: DriverExperience.main_category now feeds the same category stat
     # historical RideCategoryUsage rows feed (first static option = Economy).
     assert report.categories.category_distribution.counts.get("Economy", 0) >= 1
+
+
+# ---- Q12/Q13 (driver_type_loyalty, driver_motivation) + executive summary ----
+#
+# Both questions are fully button-based (no free text), stored in
+# survey_answer_options — none of the dataset fixture's hand-built rows
+# cover them, so these tests drive real SurveySession walkthroughs instead,
+# same technique as test_new_15q_survey_via_survey_session_feeds_dashboard_stats
+# above.
+
+
+async def _drive_survey(
+    session, interviewer, city, platform_ids, *, driver_type_loyalty, driver_motivation, switch_frequency_code, with_screenshot
+):
+    from sqlalchemy import select
+
+    from telegram_bot.application.survey_session import CursorState, SurveySession
+    from telegram_bot.infrastructure.db.models import SwitchFrequency
+
+    s = await SurveySession.resume(session, CursorState.initial(), interviewer)
+    await s.answer(s.current_question(), str(city.id))
+    while not s.is_review():
+        q = s.current_question()
+        if q.code == "platforms_used":
+            await s.answer(q, platform_ids)
+        elif q.code == "driver_type_loyalty":
+            await s.answer(q, driver_type_loyalty)
+        elif q.code == "driver_motivation":
+            await s.answer(q, driver_motivation)
+        elif q.code == "switch_frequency":
+            sf = (
+                await session.execute(select(SwitchFrequency).where(SwitchFrequency.code == switch_frequency_code))
+            ).scalars().first()
+            await s.answer(q, str(sf.id))
+        elif q.code == "hours_and_season":
+            await s.answer(q, ["7_8", "more_in_summer"])
+        elif q.code == "earnings":
+            options = await s.resolve_options(q)
+            basis = next(o.value for o in options if o.value.isdigit())
+            await s.answer(q, ["500k_1m", basis])
+        elif q.qtype.value == "single_choice":
+            options = await s.resolve_options(q)
+            await s.answer(q, options[0].value)
+        elif q.qtype.value == "multi_choice":
+            options = await s.resolve_options(q)
+            await s.answer(q, [options[0].value])
+        elif q.code == "has_screenshots":
+            await s.answer(q, with_screenshot)
+            # Answering True does NOT advance the cursor — it hands control
+            # to the upload loop instead (see SurveySession.answer's
+            # docstring) — so this must break out here rather than loop
+            # back and re-answer has_screenshots forever.
+            break
+    if with_screenshot:
+        await s.record_screenshot(telegram_file_id=f"f-{s.survey.id}", telegram_file_unique_id=f"u-{s.survey.id}")
+        await s.finish_screenshot_upload()
+    await s.confirm()
+    return s
+
+
+async def test_multi_app_platform_count_distribution(session, interviewer, city, platform_yandex, platform_uklon):
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["independent"], driver_motivation=["higher_earnings"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id), str(platform_uklon.id)],
+        driver_type_loyalty=["fleet"], driver_motivation=["lower_commission"],
+        switch_frequency_code="once_a_day", with_screenshot=False,
+    )
+
+    report = await (await _service(session)).generate_report()
+    dist = report.multi_app.platform_count_distribution
+    assert dist.counts == {"1": 1, "2": 1, "3+": 0}
+    assert dist.total == 2
+
+
+async def test_questionnaire_option_stats_driver_motivation(session, interviewer, city, platform_yandex):
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["independent"], driver_motivation=["higher_earnings", "lower_commission"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["independent"], driver_motivation=["higher_earnings"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+
+    report = await (await _service(session)).generate_report()
+    motivation = report.questionnaire.driver_motivation
+    assert motivation.counts["higher_earnings"] == 2
+    assert motivation.counts["lower_commission"] == 1
+    assert motivation.total == 3  # selections, not respondents
+
+
+async def test_questionnaire_option_stats_employment_and_loyalty_classification(session, interviewer, city, platform_yandex):
+    # independent + no loyalty program stated
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["independent", "no_loyalty_program"], driver_motivation=["higher_earnings"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+    # fleet + has loyalty program
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["fleet", "has_loyalty_program"], driver_motivation=["higher_earnings"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+    # answered Q12 but picked neither employment nor loyalty option
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["dont_know"], driver_motivation=["higher_earnings"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+
+    report = await (await _service(session)).generate_report()
+    employment = report.questionnaire.employment_relationship
+    assert employment.counts == {"Independent": 1, "Fleet": 1, "Not stated": 1}
+
+    loyalty = report.questionnaire.loyalty_program
+    assert loyalty.counts == {"No loyalty program": 1, "Has loyalty program": 1, "Not stated": 1}
+
+
+async def test_executive_summary_kpis(session, interviewer, city, platform_yandex, platform_uklon):
+    # Survey 1: 1 platform, never switches, no screenshot
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id)],
+        driver_type_loyalty=["independent"], driver_motivation=["higher_earnings"],
+        switch_frequency_code="never_same_app", with_screenshot=False,
+    )
+    # Survey 2: 2 platforms, switches daily, WITH screenshot
+    await _drive_survey(
+        session, interviewer, city, [str(platform_yandex.id), str(platform_uklon.id)],
+        driver_type_loyalty=["fleet"], driver_motivation=["higher_earnings", "lower_commission"],
+        switch_frequency_code="once_a_day", with_screenshot=True,
+    )
+
+    report = await (await _service(session)).generate_report()
+    exec_summary = report.executive
+
+    assert exec_summary.total_respondents == 2
+    assert exec_summary.multi_platform_pct == 50.0
+    assert exec_summary.most_used_platform == "Yandex Go"  # used by both surveys
+    # switch_frequency broadcasts per platform: survey 1 -> 1 "never" row,
+    # survey 2 -> 2 "switches" rows (one per platform) = 1 never / 3 total
+    assert exec_summary.switch_willingness_pct == round((1 - 1 / 3) * 100, 1)
+    assert exec_summary.screenshot_share_pct == 50.0
+    assert exec_summary.top_improvement_request == "higher_earnings"
 
 
 # ---- MARKET: sample vs. estimates --------------------------------------------

@@ -145,6 +145,13 @@ async def test_list_languages(client):
     assert codes == {"en", "ru", "uz"}
 
 
+async def test_list_driver_types(client):
+    resp = await client.get("/api/driver-types")
+    assert resp.status_code == 200
+    codes = {d["code"] for d in resp.json()}
+    assert {"independent", "fleet"} <= codes
+
+
 async def test_overview_filtered_by_language(client, session, dataset):
     from telegram_bot.domain.enums import Language
 
@@ -241,6 +248,119 @@ async def test_platform_stats_shape(client, dataset):
     assert body["exclusivity"]["counts"] == {"yes": 1}
     assert body["receives_bonuses"]["counts"] == {"yes": 1, "no": 1}
     assert body["cash_pct"]["count"] == 2
+
+
+# ---- EXECUTIVE SUMMARY / QUESTIONNAIRE STATS (Q12/Q13) ---------------------------
+#
+# `dataset` builds its two surveys by hand (old-style rows, no
+# survey_answer_options), so Q12/Q13 breakdowns are empty for it — these
+# tests check the endpoint's shape and the fields `dataset` *does* cover
+# (respondent count, most-used platform, screenshot share); a real
+# driver_motivation/driver_type_loyalty value is exercised via a small
+# extra survey, same pattern as test_qualitative_feeds_new_fields.
+
+
+async def test_executive_summary_shape_and_values(client, dataset):
+    resp = await client.get("/api/executive-summary")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_respondents"] == 2
+    assert body["most_used_platform"] == "Yandex Go"  # used by both surveys
+    assert body["multi_platform_pct"] == 50.0  # survey TWO only
+    assert body["screenshot_share_pct"] == 50.0  # survey ONE only
+    assert body["switch_willingness_pct"] == 0.0  # fixture sets no switch_frequency at all
+    assert body["top_improvement_request"] is None  # fixture sets no driver_motivation answers
+
+
+async def test_questionnaire_stats_empty_for_fixture_without_answer_options(client, dataset):
+    resp = await client.get("/api/questionnaire-stats")
+    assert resp.status_code == 200
+    body = resp.json()
+    for key in ("platform_usage", "platform_count_distribution", "driver_motivation", "employment_relationship", "loyalty_program"):
+        assert key in body
+    assert body["driver_motivation"]["counts"] == {}
+    assert body["platform_usage"]["counts"] == {"Yandex Go": 2, "Uklon": 1}
+
+
+async def test_questionnaire_stats_reflects_real_answer_options(client, session, interviewer, city, platform_yandex, dataset):
+    from telegram_bot.infrastructure.db.models import SurveyAnswerOption
+
+    s = Survey(
+        human_code="Q12Q13-001", interviewer_id=interviewer.id, city_id=city.id,
+        status=SurveyStatus.COMPLETED, survey_datetime=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+    )
+    session.add(s)
+    await session.flush()
+    session.add_all([
+        SurveyAnswerOption(survey_id=s.id, question_code="driver_motivation", option_code="higher_earnings"),
+        SurveyAnswerOption(survey_id=s.id, question_code="driver_type_loyalty", option_code="independent"),
+    ])
+    await session.flush()
+
+    resp = await client.get("/api/questionnaire-stats")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["driver_motivation"]["counts"] == {"higher_earnings": 1}
+    assert body["employment_relationship"]["counts"] == {"Independent": 1}
+
+
+async def test_driver_type_filter_scopes_executive_summary(client, session, dataset):
+    """StatisticsFilters.driver_type_id existed but DashboardFilters never
+    passed it through — a real gap fixed alongside this redesign."""
+    from telegram_bot.infrastructure.db.models import DriverEmployment, DriverType
+
+    independent = (
+        await session.execute(DriverType.__table__.select().where(DriverType.code == "independent"))
+    ).first()
+    session.add(DriverEmployment(survey_id=dataset["one"].id, driver_type_id=independent.id))
+    await session.flush()
+
+    resp = await client.get("/api/executive-summary", params={"driver_type_id": independent.id})
+    assert resp.status_code == 200
+    assert resp.json()["total_respondents"] == 1  # only survey ONE has this driver_type
+
+
+# ---- SCREENSHOTS GALLERY ----------------------------------------------------------
+
+
+async def test_screenshots_gallery_shape_and_summary(client, dataset):
+    resp = await client.get("/api/screenshots")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1  # only survey ONE's screenshot
+    assert body["summary"]["submitted"] == 1
+    assert body["summary"]["total_respondents"] == 2
+    assert body["summary"]["pct"] == 50.0
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["survey_id"] == "TAS-000001"
+    assert item["city"] == "Tashkent"
+    assert item["platform"] == "Yandex Go"
+    assert item["cached_locally"] is False  # dataset never sets local_path
+    assert body["by_platform"]["counts"] == {"Yandex Go": 1}
+    assert body["by_city"]["counts"] == {"Tashkent": 1}
+
+
+async def test_screenshots_gallery_pagination(client, dataset):
+    resp = await client.get("/api/screenshots", params={"page": 0, "page_size": 1})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["page"] == 0
+    assert body["page_size"] == 1
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+
+    resp_page1 = await client.get("/api/screenshots", params={"page": 1, "page_size": 1})
+    assert resp_page1.json()["items"] == []
+
+
+async def test_screenshots_gallery_city_filter(client, dataset):
+    resp = await client.get("/api/screenshots", params={"city_id": dataset["samarkand"].id})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 0  # survey TWO (Samarkand) has no screenshots
+    assert body["summary"]["submitted"] == 0
 
 
 # ---- QUALITATIVE -----------------------------------------------------------------

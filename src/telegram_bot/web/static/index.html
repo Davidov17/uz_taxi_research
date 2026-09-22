@@ -17,6 +17,9 @@
       <label>Platform
         <select id="filter-platform"><option value="">All platforms</option></select>
       </label>
+      <label>Driver type
+        <select id="filter-driver-type"><option value="">All driver types</option></select>
+      </label>
       <label>Language
         <select id="filter-language"><option value="">All languages</option></select>
       </label>
@@ -28,9 +31,10 @@
   </header>
 
   <nav class="tabs">
-    <button class="tab-link active" data-tab="overview">Overview</button>
+    <button class="tab-link active" data-tab="overview">Executive</button>
     <button class="tab-link" data-tab="economics">Driver Economics</button>
     <button class="tab-link" data-tab="platform">Platform</button>
+    <button class="tab-link" data-tab="screenshots">Screenshots</button>
     <button class="tab-link" data-tab="qualitative">Qualitative</button>
     <button class="tab-link" data-tab="raw">Raw Data</button>
     <button class="tab-link" data-tab="export">Export</button>
@@ -39,14 +43,32 @@
   <main>
     <section id="tab-overview" class="tab-panel active">
       <div class="card-row">
-        <div class="stat-card"><span class="stat-label">Total surveys</span><span class="stat-value" id="ov-total">—</span></div>
-        <div class="stat-card"><span class="stat-label">Completed surveys</span><span class="stat-value" id="ov-completed">—</span></div>
+        <div class="stat-card"><span class="stat-label">Total respondents</span><span class="stat-value" id="kpi-respondents">—</span></div>
+        <div class="stat-card"><span class="stat-label">Using multiple platforms</span><span class="stat-value" id="kpi-multi-platform">—</span></div>
+        <div class="stat-card"><span class="stat-label">Most-used platform</span><span class="stat-value" id="kpi-top-platform">—</span></div>
+        <div class="stat-card"><span class="stat-label">Switch between apps <span class="badge">from Q2</span></span><span class="stat-value" id="kpi-switch">—</span></div>
+        <div class="stat-card"><span class="stat-label">Shared a screenshot</span><span class="stat-value" id="kpi-screenshots">—</span></div>
+        <div class="stat-card"><span class="stat-label">Top improvement request</span><span class="stat-value stat-value-text" id="kpi-top-request">—</span></div>
       </div>
       <p class="sample-note">Charts below show <strong>sample statistics from surveyed drivers</strong> — counts reflect exactly the completed surveys in the current filter, not the full driver population.</p>
       <div class="chart-row">
         <div class="chart-box"><h3>Surveys by city</h3><canvas id="chart-by-city"></canvas></div>
         <div class="chart-box"><h3>Surveys by platform</h3><canvas id="chart-by-platform"></canvas></div>
         <div class="chart-box"><h3>Surveys by language</h3><canvas id="chart-by-language"></canvas></div>
+      </div>
+
+      <h3>Platform usage &amp; driver relationship</h3>
+      <p class="sample-note">Q1 (apps driven for) and Q12 (how drivers work with platforms) — all button-based, structured answers.</p>
+      <div class="chart-row">
+        <div class="chart-box"><h3>Platforms per driver</h3><canvas id="chart-platform-count"></canvas></div>
+        <div class="chart-box"><h3>Employment relationship</h3><canvas id="chart-employment-relationship"></canvas></div>
+        <div class="chart-box"><h3>Loyalty program</h3><canvas id="chart-loyalty-program"></canvas></div>
+      </div>
+
+      <h3>What would improve driver experience</h3>
+      <p class="sample-note">Q13 — what would improve a driver's experience, or make them switch to a new app. A driver can select more than one reason.</p>
+      <div class="chart-row">
+        <div class="chart-box chart-box-wide"><canvas id="chart-driver-motivation"></canvas></div>
       </div>
     </section>
 
@@ -82,6 +104,27 @@
       <div class="chart-row">
         <div class="chart-box"><h3>Commission by platform (avg %)</h3><canvas id="chart-commission-platform"></canvas></div>
         <div class="chart-box"><h3>Cash vs. digital payment share (avg %)</h3><canvas id="chart-cash-share"></canvas></div>
+      </div>
+    </section>
+
+    <section id="tab-screenshots" class="tab-panel">
+      <div class="card-row">
+        <div class="stat-card"><span class="stat-label">Screenshots submitted</span><span class="stat-value" id="ss-submitted">—</span></div>
+        <div class="stat-card"><span class="stat-label">Of respondents</span><span class="stat-value" id="ss-total">—</span></div>
+        <div class="stat-card"><span class="stat-label">Submission rate</span><span class="stat-value" id="ss-pct">—</span></div>
+      </div>
+      <p class="sample-note">Screenshots are stored and shown here as evidence only — no data is extracted or analyzed from the images themselves.</p>
+      <div class="chart-row">
+        <div class="chart-box"><h3>By platform</h3><canvas id="chart-screenshots-platform"></canvas></div>
+        <div class="chart-box"><h3>By city</h3><canvas id="chart-screenshots-city"></canvas></div>
+        <div class="chart-box"><h3>By date</h3><canvas id="chart-screenshots-date"></canvas></div>
+      </div>
+      <h3>Gallery</h3>
+      <div id="screenshot-gallery" class="screenshot-grid"></div>
+      <div class="pager">
+        <button id="ss-prev-page">← Prev</button>
+        <span id="ss-page-info"></span>
+        <button id="ss-next-page">Next →</button>
       </div>
     </section>
 

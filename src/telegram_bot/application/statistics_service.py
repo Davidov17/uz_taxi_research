@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from telegram_bot.domain.enums import Language, SurveyStatus
 from telegram_bot.infrastructure.db.models import (
+    Attachment,
     Bonus,
     City,
     DriverEmployment,
@@ -46,7 +47,9 @@ from telegram_bot.infrastructure.db.models import (
     RideCategory,
     RideCategoryUsage,
     Survey,
+    SurveyAnswerOption,
     SurveyPlatform,
+    SwitchFrequency,
     WorkingStats,
 )
 
@@ -159,6 +162,7 @@ class BonusStats:
 @dataclass(frozen=True)
 class MultiAppStats:
     platform_count_bucket: CategoryBreakdown  # "one platform" / "multiple platforms"
+    platform_count_distribution: CategoryBreakdown  # "1" / "2" / "3+" — finer-grained than platform_count_bucket
     platform_combinations: CategoryBreakdown
     exclusivity: CategoryBreakdown  # "yes" / "no", from survey_platforms.is_exclusive (asked for single-platform drivers)
 
@@ -211,6 +215,58 @@ class DriverEstimates:
 
 
 @dataclass(frozen=True)
+class QuestionnaireOptionStats:
+    """Breakdowns of the current questionnaire's button-based multi-select
+    answers stored in survey_answer_options — Q12 (driver_type_loyalty)
+    and Q13 (driver_motivation). Both are fully structured (no free text),
+    so unlike DriverEstimates/DriverTypeStats above these are direct
+    tabulations, not best-effort keyword guesses.
+    """
+
+    driver_motivation: CategoryBreakdown
+    """Q13: what would improve the driver's experience / make them switch
+    to a new app — one entry per option a driver could select, counted
+    across every respondent who answered (a respondent can contribute to
+    several categories, since it's multi-select)."""
+    employment_relationship: CategoryBreakdown
+    """Derived from Q12's independent/fleet selections: "Independent",
+    "Fleet", "Both" (selected both — rare, kept rather than hidden), or
+    "Not stated" (answered Q12 but picked neither, e.g. only a loyalty
+    option or "don't know")."""
+    loyalty_program: CategoryBreakdown
+    """Derived from Q12's has/no loyalty program selections: "Has loyalty
+    program", "No loyalty program", "Unclear" (selected both — a
+    contradictory answer, kept visible rather than silently dropped), or
+    "Not stated"."""
+
+
+@dataclass(frozen=True)
+class ExecutiveSummary:
+    """The dashboard's top-line KPI cards — each field composed from a
+    report section computed elsewhere (StatisticsService avoids re-running
+    the same query twice), not new aggregation logic of its own."""
+
+    total_respondents: int
+    multi_platform_pct: float
+    """Share of respondents using more than one platform (survey_platforms
+    per survey > 1) — from MultiAppStats.platform_count_distribution."""
+    most_used_platform: str | None
+    """Top entry of GeneralStats.surveys_by_platform, or None if no survey
+    in scope has reported a platform."""
+    switch_willingness_pct: float
+    """Share of respondents who answered anything other than "never
+    switches" to Q2 (switch_frequency) — a proxy for switching behavior,
+    not a direct "would you switch platforms?" question; label it as such
+    in the UI."""
+    screenshot_share_pct: float
+    """Share of respondents with at least one actually-uploaded screenshot
+    attachment — not just those who answered "yes" to has_screenshots."""
+    top_improvement_request: str | None
+    """Top entry of QuestionnaireOptionStats.driver_motivation, or None if
+    no survey in scope has answered Q13."""
+
+
+@dataclass(frozen=True)
 class StatisticsReport:
     filters: StatisticsFilters
     general: GeneralStats
@@ -224,6 +280,8 @@ class StatisticsReport:
     categories: CategoryUsageStats
     sample_market: SampleMarketStats
     driver_estimates: DriverEstimates
+    questionnaire: QuestionnaireOptionStats
+    executive: ExecutiveSummary
 
 
 # ---- best-effort free-text classification (seasonality, driver type) -------
@@ -336,19 +394,25 @@ class StatisticsService:
 
     async def generate_report(self, filters: StatisticsFilters | None = None) -> StatisticsReport:
         filters = filters or StatisticsFilters()
+        general = await self._general_stats(filters)
+        multi_app = await self._multi_app_stats(filters)
+        questionnaire = await self._questionnaire_option_stats(filters)
+        executive = await self._executive_summary(filters, general, multi_app, questionnaire)
         return StatisticsReport(
             filters=filters,
-            general=await self._general_stats(filters),
+            general=general,
             working_pattern=await self._working_pattern_stats(filters),
             earnings=await self._earnings_stats(filters),
             commission=await self._commission_stats(filters),
             payments=await self._payment_stats(filters),
             bonuses=await self._bonus_stats(filters),
-            multi_app=await self._multi_app_stats(filters),
+            multi_app=multi_app,
             driver_type=await self._driver_type_stats(filters),
             categories=await self._category_stats(filters),
             sample_market=await self._sample_market_stats(filters),
             driver_estimates=await self._driver_estimates(filters),
+            questionnaire=questionnaire,
+            executive=executive,
         )
 
     # ---- shared filter plumbing --------------------------------------------
@@ -622,9 +686,12 @@ class StatisticsService:
             platforms_by_survey.setdefault(survey_id, set()).add(platform_name)
 
         bucket_counts: dict[str, int] = {"one platform": 0, "multiple platforms": 0}
+        distribution_counts: dict[str, int] = {"1": 0, "2": 0, "3+": 0}
         combination_counts: dict[str, int] = {}
         for platform_names in platforms_by_survey.values():
-            bucket_counts["one platform" if len(platform_names) == 1 else "multiple platforms"] += 1
+            n = len(platform_names)
+            bucket_counts["one platform" if n == 1 else "multiple platforms"] += 1
+            distribution_counts[str(n) if n <= 2 else "3+"] += 1
             combo = ", ".join(sorted(platform_names))
             combination_counts[combo] = combination_counts.get(combo, 0) + 1
 
@@ -642,6 +709,9 @@ class StatisticsService:
 
         return MultiAppStats(
             platform_count_bucket=CategoryBreakdown(counts=bucket_counts, total=sum(bucket_counts.values())),
+            platform_count_distribution=CategoryBreakdown(
+                counts=distribution_counts, total=sum(distribution_counts.values())
+            ),
             platform_combinations=CategoryBreakdown(
                 counts=combination_counts, total=sum(combination_counts.values())
             ),
@@ -776,4 +846,134 @@ class StatisticsService:
             estimated_driver_count=estimated_driver_count,
             seasonality_text_classification=seasonality_breakdown,
             seasonal_pattern=seasonal_pattern,
+        )
+
+    # ---- QUESTIONNAIRE OPTIONS (Q12/Q13) -----------------------------------
+
+    async def _questionnaire_option_stats(self, filters: StatisticsFilters) -> QuestionnaireOptionStats:
+        eligible = self._eligible_survey_ids(filters)
+
+        driver_motivation = await self._breakdown(
+            SurveyAnswerOption.option_code,
+            SurveyAnswerOption.survey_id.in_(eligible),
+            SurveyAnswerOption.question_code == "driver_motivation",
+        )
+
+        loyalty_rows = (
+            await self.db.execute(
+                select(SurveyAnswerOption.survey_id, SurveyAnswerOption.option_code).where(
+                    SurveyAnswerOption.survey_id.in_(eligible),
+                    SurveyAnswerOption.question_code == "driver_type_loyalty",
+                )
+            )
+        ).all()
+        options_by_survey: dict = {}
+        for survey_id, option_code in loyalty_rows:
+            options_by_survey.setdefault(survey_id, set()).add(option_code)
+
+        employment_counts: dict[str, int] = {}
+        loyalty_counts: dict[str, int] = {}
+        for options in options_by_survey.values():
+            has_independent = "independent" in options
+            has_fleet = "fleet" in options
+            if has_independent and has_fleet:
+                employment_label = "Both"
+            elif has_independent:
+                employment_label = "Independent"
+            elif has_fleet:
+                employment_label = "Fleet"
+            else:
+                employment_label = "Not stated"
+            employment_counts[employment_label] = employment_counts.get(employment_label, 0) + 1
+
+            has_program = "has_loyalty_program" in options
+            no_program = "no_loyalty_program" in options
+            if has_program and no_program:
+                loyalty_label = "Unclear"
+            elif has_program:
+                loyalty_label = "Has loyalty program"
+            elif no_program:
+                loyalty_label = "No loyalty program"
+            else:
+                loyalty_label = "Not stated"
+            loyalty_counts[loyalty_label] = loyalty_counts.get(loyalty_label, 0) + 1
+
+        return QuestionnaireOptionStats(
+            driver_motivation=driver_motivation,
+            employment_relationship=CategoryBreakdown(
+                counts=employment_counts, total=sum(employment_counts.values())
+            ),
+            loyalty_program=CategoryBreakdown(counts=loyalty_counts, total=sum(loyalty_counts.values())),
+        )
+
+    # ---- EXECUTIVE SUMMARY --------------------------------------------------
+
+    _NEVER_SWITCHES_CODES = {"never", "never_same_app"}
+    """Both the legacy (`never`) and current-questionnaire (`never_same_app`)
+    switch_frequencies codes for "doesn't switch apps" — see seed_data.py."""
+
+    async def _executive_summary(
+        self,
+        filters: StatisticsFilters,
+        general: GeneralStats,
+        multi_app: MultiAppStats,
+        questionnaire: QuestionnaireOptionStats,
+    ) -> ExecutiveSummary:
+        eligible = self._eligible_survey_ids(filters)
+
+        total_respondents = general.completed_surveys
+
+        single_platform_share = 0.0
+        if multi_app.platform_count_distribution.total:
+            single_platform_share = (
+                multi_app.platform_count_distribution.counts.get("1", 0)
+                / multi_app.platform_count_distribution.total
+            )
+        multi_platform_pct = round((1 - single_platform_share) * 100, 1) if multi_app.platform_count_distribution.total else 0.0
+
+        most_used_platform = None
+        if general.surveys_by_platform.counts:
+            most_used_platform = max(general.surveys_by_platform.counts.items(), key=lambda kv: kv[1])[0]
+
+        # switch_frequency is answered once per survey but broadcast to every
+        # selected platform's survey_platforms row (see SurveySession's
+        # switch_frequency dispatch), so this breakdown is counted per
+        # platform-relationship, not per respondent — a driver using 2
+        # platforms contributes 2 identical rows here. Consistent with how
+        # every other platform-scoped breakdown in this file already counts
+        # (commission_by_platform, earnings_by_platform, ...).
+        switch_breakdown = await self._breakdown(
+            SwitchFrequency.code,
+            SurveyPlatform.survey_id.in_(eligible),
+            SurveyPlatform.switch_frequency_id == SwitchFrequency.id,
+        )
+        switch_willingness_pct = 0.0
+        if switch_breakdown.total:
+            never_count = sum(
+                count for code, count in switch_breakdown.counts.items() if code in self._NEVER_SWITCHES_CODES
+            )
+            switch_willingness_pct = round((1 - never_count / switch_breakdown.total) * 100, 1)
+
+        screenshot_survey_count = (
+            await self.db.execute(
+                select(func.count(func.distinct(Attachment.survey_id))).where(Attachment.survey_id.in_(eligible))
+            )
+        ).scalar_one()
+        screenshot_share_pct = (
+            round(screenshot_survey_count / total_respondents * 100, 1) if total_respondents else 0.0
+        )
+
+        top_improvement_request = None
+        if questionnaire.driver_motivation.counts:
+            top_improvement_request = max(
+                questionnaire.driver_motivation.counts.items(), key=lambda kv: kv[1]
+            )[0]
+
+        return ExecutiveSummary(
+            total_respondents=total_respondents,
+            multi_platform_pct=multi_platform_pct,
+            most_used_platform=most_used_platform,
+            switch_willingness_pct=switch_willingness_pct,
+            screenshot_share_pct=screenshot_share_pct,
+            top_improvement_request=top_improvement_request,
         )
