@@ -21,11 +21,14 @@ pytestmark = pytest.mark.asyncio
 
 
 class FakeDispatcher:
-    def __init__(self):
+    def __init__(self, *, raises: bool = False):
         self.fed_updates = []
+        self._raises = raises
 
     async def feed_update(self, bot, update):
         self.fed_updates.append(update)
+        if self._raises:
+            raise RuntimeError("boom — simulated handler bug")
 
 
 def _sample_update_payload(update_id: int = 1) -> dict:
@@ -94,6 +97,25 @@ async def test_webhook_accepts_correct_secret_token(webhook_app, monkeypatch):
             headers={"X-Telegram-Bot-Api-Secret-Token": "s3cr3t"},
         )
     assert resp.status_code == 200
+    assert len(fake_dispatcher.fed_updates) == 1
+
+
+async def test_webhook_returns_200_even_when_dispatcher_raises(monkeypatch):
+    """feed_update() doesn't catch handler exceptions the way aiogram's
+    own long-polling loop does — a bug in a handler must never surface as
+    a 500 here, since Telegram then blocks retrying *this* update before
+    delivering anything newer, making the whole chat look stuck (this
+    exact failure mode is what prompted this test)."""
+    app = FastAPI()
+    app.include_router(bot_webhook.router)
+    fake_dispatcher = FakeDispatcher(raises=True)
+    monkeypatch.setattr(bot_webhook, "_bot", object())
+    monkeypatch.setattr(bot_webhook, "_dispatcher", fake_dispatcher)
+    monkeypatch.setattr(bot_webhook.settings, "webhook_secret", "")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(bot_webhook.WEBHOOK_PATH, json=_sample_update_payload())
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
     assert len(fake_dispatcher.fed_updates) == 1
 
 

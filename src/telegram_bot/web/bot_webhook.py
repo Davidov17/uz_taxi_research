@@ -78,5 +78,16 @@ async def telegram_webhook(request: Request) -> dict:
 
     payload = await request.json()
     update = Update.model_validate(payload)
-    await _dispatcher.feed_update(_bot, update)
+    try:
+        await _dispatcher.feed_update(_bot, update)
+    except Exception:
+        # Unlike long-polling (where aiogram catches a handler's exception
+        # internally and just logs it, so the loop keeps going),
+        # feed_update() propagates one straight out. Letting that reach
+        # FastAPI as a 500 makes Telegram treat *this* update as
+        # undelivered and keep retrying it before sending anything newer —
+        # exactly the "bot looks completely stuck" failure mode. Always
+        # acknowledge the update instead; the underlying bug still needs
+        # fixing, but it should never block the whole chat.
+        logger.exception("Unhandled error processing Telegram update %s", update.update_id)
     return {"ok": True}
